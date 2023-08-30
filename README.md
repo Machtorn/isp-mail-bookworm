@@ -1,10 +1,12 @@
 # isp-mail-bookworm
 
 Before performing any action, choose two domains :
+
  1- the first for your fqdn
  2- the second for your virtual domain (future mail adress)
 
 Don't forget to add fqdn server and webmail subdomains in dns zone (A record target your vps ipv4)
+
 Also reverse dns is very important to configure before working with this playbook
 
 This playbook was succefully tested on OVHcloud vps (starter is perfect for a few mail adress)
