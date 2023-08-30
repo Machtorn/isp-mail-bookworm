@@ -20,32 +20,49 @@ monitoring will be add in future version of this playbook
 Vars file with some explanations
 
 # Base config
+
 hostname: hostname you will define for your server ex: mail
+
 ipv4_adress: ipv4 of your server
+
 localdomain: domain you will use for server fqdn and/or webmail
+
 server_admin: Machtorn
+
 admin_ip: your public ip (access to rspamd interface)
+
 ssh_port: 22
 
 # Apache config
+
 webmail: name of your webmail (usually webmail)
+
 mailadministrator: your admin email
+
 roundcube_vhost: webmail-http.conf
 
 # Mariadb credentials
+
 mariadb_root: mariadb root passwd
+
 mailadmin: mariadb admin passwd
+
 mailserver: mariadb server passwd
 
 # Rspamd interface password
+
 rspamdpwd: passwd rspamd gui
 
 # dkim configuration
+
 selector: selector for your public key in dns zone
 
 # Add domain and user
+
 virtualdomain: domain you want to use with your mail adress
+
 emailadress: your future mail adress
+
 password: default password defined for your mail adress (user should change it after email creation)
 
 Don't forget to declare public key of dkim on your "virtual domain" dns zone.
