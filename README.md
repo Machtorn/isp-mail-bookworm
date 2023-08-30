@@ -19,9 +19,11 @@ security role is just a start and/or example for your future security policy
 
 monitoring will be add in future version of this playbook
 
-Vars file with some explanations
 
-# Base config
+# Vars file with some explanations
+
+
+Base config
 
 hostname: #hostname you will define for your server ex: mail
 
@@ -35,7 +37,8 @@ admin_ip: #your public ip (access to rspamd interface)
 
 ssh_port: 22
 
-# Apache config
+
+Apache config
 
 webmail: #name of your webmail (usually webmail)
 
@@ -43,7 +46,8 @@ mailadministrator: #your admin email
 
 roundcube_vhost: webmail-http.conf
 
-# Mariadb credentials
+
+Mariadb credentials
 
 mariadb_root: #mariadb root passwd
 
@@ -51,20 +55,24 @@ mailadmin: #mariadb admin passwd
 
 mailserver: #mariadb server passwd
 
-# Rspamd interface password
+
+Rspamd interface password
 
 rspamdpwd: #passwd rspamd gui
 
-# dkim configuration
+
+dkim configuration
 
 selector: #selector for your public key in dns zone
 
-# Add domain and user
+
+Add domain and user
 
 virtualdomain: #domain you want to use with your mail adress
 
 emailadress: #your future mail adress
 
 password: #default password defined for your mail adress (user should change it after email creation)
+
 
 Don't forget to declare public key of dkim on your "virtual domain" dns zone.
