@@ -20,11 +20,11 @@ monitoring will be add in future version of this playbook
 Vars file with some explanations
 
 # Base config
-hostname: #hostname you will define for your server ex: mail
-ipv4_adress: #ipv4 of your server
-localdomain: #domain you will use for server fqdn and/or webmail
+hostname: hostname you will define for your server ex: mail
+ipv4_adress: ipv4 of your server
+localdomain: domain you will use for server fqdn and/or webmail
 server_admin: Machtorn
-admin_ip: #your public ip (access to rspamd interface)
+admin_ip: your public ip (access to rspamd interface)
 ssh_port: 22
 
 # Apache config
