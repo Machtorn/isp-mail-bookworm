@@ -1,0 +1,29 @@
+---
+# Base config
+hostname:
+ipv4_adress:
+localdomain:
+server_admin: Machtorn
+admin_ip:
+ssh_port: 22
+
+# Apache config
+webmail:
+mailadministrator:
+roundcube_vhost:
+
+# Mariadb credentials
+mariadb_root:
+mailadmin:
+mailserver:
+
+# Rspamd interface password
+rspamdpwd:
+
+# dkim configuration
+virtualdomain:
+selector:
+
+# Add user
+emailadress:
+password:

@@ -1,0 +1,42 @@
+---
+# handlers file for security
+- name: reload sshd
+  ansible.builtin.systemd:
+    name: sshd.service
+    state: reloaded
+
+- name: enable nftables
+  ansible.builtin.systemd:
+    name: nftables.service
+    enabled: true
+
+- name: stop nftables
+  ansible.builtin.systemd:
+    name: nftables.service
+    state: stopped
+
+- name: start nftables
+  ansible.builtin.systemd:
+    name: nftables.service
+    state: started
+
+- name: restart nftables
+  ansible.builtin.systemd:
+    name: nftables.service
+    state: restarted
+
+- name: enable fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban.service
+    enabled: true
+
+- name: start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban.service
+    state: started
+
+- name: restart fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban.service
+    state: restarted
+

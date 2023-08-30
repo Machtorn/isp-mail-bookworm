@@ -1,0 +1,10 @@
+---
+# handlers file for general
+
+- name: reboot server
+  ansible.builtin.reboot:
+
+- name: enable rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog.service
+    enabled: true

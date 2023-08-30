@@ -1,0 +1,7 @@
+---
+# handlers file for dovecot
+
+- name: Restart dovecot
+  ansible.builtin.systemd:
+    name: dovecot.service
+    state: restarted

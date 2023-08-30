@@ -1,0 +1,65 @@
+---
+# tasks file for dkim
+- name: Create directory for dkim keys
+  ansible.builtin.file:
+    path: /var/lib/rspamd/dkim
+    state: directory
+    owner: _rspamd
+    group: _rspamd
+    mode: '0755'
+
+- name: Create file for private dkim key
+  ansible.builtin.file:
+    path: /var/lib/rspamd/dkim/{{ virtualdomain }}.{{ selector }}.key
+    state: touch
+    owner: _rspamd
+    group: _rspamd
+    mode: u=rw,go=
+
+- name: Create the key and store private key in file
+  ansible.builtin.command: rspamadm dkim_keygen -b 2048 -d {{ virtualdomain }} -s {{ selector }} -k {{ virtualdomain }}.{{ selector }}.key
+  args:  
+    chdir: /var/lib/rspamd/dkim/
+  register: dkimkey
+
+- name: Print public_dkim_key in order to copy on dns zone of virtualdomain
+  ansible.builtin.debug:
+    var: dkimkey.stdout
+#    verbosity: 4
+
+- name: Change right for private dkim key
+  ansible.builtin.file:
+    path: /var/lib/rspamd/dkim/{{ virtualdomain }}.{{ selector }}.key
+    mode: u=r,go=
+
+- name: Create file instruction rspamd mapping
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/dkim_signing.conf
+    state: touch
+    mode: u=rw,go=r
+
+- name: Add instruction in dkim_signing.com file for mapping
+  ansible.builtin.blockinfile:
+    path: /etc/rspamd/local.d/dkim_signing.conf
+    block: |
+      path = "/var/lib/rspamd/dkim/$domain.$selector.key";
+      selector_map = "/etc/rspamd/dkim_selectors.map";
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart rspamd
+
+- name: Create dkim mapping file
+  ansible.builtin.file:
+    path: /etc/rspamd/dkim_selectors.map
+    state: touch
+    mode: u=rw,go=r
+
+- name: Add mapping instruction in dkim_selectors.map
+  ansible.builtin.lineinfile:
+    path: /etc/rspamd/dkim_selectors.map
+    line: "{{ virtualdomain }} {{ selector }}"
+  notify:
+    - restart rspamd
+
+- name: Flush handlers
+  meta: flush_handlers

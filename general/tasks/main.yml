@@ -1,0 +1,91 @@
+---
+# tasks file for general
+
+- name: Run apt update like
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Update distro
+  ansible.builtin.apt:
+    upgrade: dist
+  notify:
+    - reboot server
+
+- name: Install syslog
+  ansible.builtin.apt:
+    name: rsyslog
+    state: latest
+  notify:
+    - enable rsyslog
+
+- name: Remove dependencies that are no longer required
+  ansible.builtin.apt:
+    autoremove: yes
+
+- name: Set default locale to fr_FR.UTF-8
+  ansible.builtin.debconf:
+    name: locales
+    question: locales/default_environment_locale
+    value: fr_FR.UTF-8
+    vtype: select
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: Install pexpect
+  ansible.builtin.apt:
+    name: python3-pexpect
+    state: latest
+
+- name: Install vim
+  ansible.builtin.apt:
+    name: vim
+    state: latest
+    update_cache: true
+
+- name: Vim config
+  ansible.builtin.blockinfile:
+    path: /etc/vim/vimrc
+    block: |
+      set nocompatible
+      set number
+      set smartindent
+    insertbefore: '" Source a global configuration file if available'
+    marker: '" {mark} Added by {{ server_admin }}'
+
+- name: Copy ascii art motd 
+  ansible.builtin.copy:
+    src: files/motd
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: Remove ipv6
+  ansible.builtin.blockinfile:
+    path: /etc/sysctl.conf
+    block: |
+      net.ipv6.conf.all.disable_ipv6 = 1
+      net.ipv6.conf.all.autoconf = 0
+      net.ipv6.conf.default.disable_ipv6 = 1
+      net.ipv6.conf.default.autoconf = 0
+    insertbefore: '#kernel.domainname = example.com'
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - reboot server
+
+- name: Define hostname and update hosts file
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}" 
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+  loop:
+    - { src: 'templates/hostname.j2', dest: '/etc/hostname' }
+    - { src: 'templates/hosts.j2', dest: '/etc/hosts' }
+  notify:
+    - reboot server
+
+- name: Flush handlers
+  meta: flush_handlers

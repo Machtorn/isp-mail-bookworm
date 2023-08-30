@@ -1,0 +1,27 @@
+---
+# handlers file for rspamd
+
+- name: restart rspamd
+  ansible.builtin.systemd:
+    name: rspamd.service
+    state: restarted
+
+- name: restart postfix
+  ansible.builtin.systemd:
+    name: postfix.service
+    state: restarted
+
+- name: restart dovecot
+  ansible.builtin.systemd:
+    name: dovecot.service
+    state: restarted
+
+- name: restart redis
+  ansible.builtin.systemd:
+    name: redis.service
+    state: restarted
+
+- name: restart redis-server
+  ansible.builtin.systemd:
+    name: redis-server.service
+    state: restarted

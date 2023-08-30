@@ -1,0 +1,18 @@
+---
+# tasks file for arc
+
+- name: Creation arc.conf file based on dkim.conf file
+  ansible.builtin.shell:
+    cmd: cp dkim.conf arc.conf
+    chdir: /etc/rspamd/local.d/
+
+- name: Add some instructions in arc.com
+  ansible.builtin.blockinfile:
+    path: /etc/rspamd/local.d/arc.conf
+    block: |
+      # whitelisted_signers_map = ["{{ virtualdomain }}", "{{ localdomain }}"]
+      sign_authenticated = true;
+      sign_local = true;
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart rspamd

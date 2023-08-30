@@ -1,0 +1,223 @@
+---
+# tasks file for dovecot
+
+- name: Install dovecot
+  ansible.builtin.apt:
+    pkg:
+    - dovecot-mysql
+    - dovecot-imapd
+    - dovecot-managesieved
+    - dovecot-lmtpd
+    state: latest
+
+- name: Create vmail group
+  ansible.builtin.group:
+    name: vmail
+    state: present
+    gid: 5000
+
+- name: Create vmail user
+  ansible.builtin.user:
+    name: vmail
+    home: /var/vmail
+    uid: 5000
+    group: vmail
+
+- name: Ensure ownership of vmail directory 
+  ansible.builtin.file:
+    path: /var/vmail/
+    owner: vmail
+    group: vmail
+
+- name: Authentification with 10-auth.conf file
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/10-auth.conf
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^auth_mechanisms = plain', To: 'auth_mechanisms = plain login'}
+   - { From: '^!include auth-system.conf.ext', To: '#!include auth-system.conf.ext'}
+   - { From: '^#!include auth-sql.conf.ext', To: '!include auth-sql.conf.ext'}
+  notify:
+   - Restart dovecot
+
+- name: Define mail location with 10-mail.conf file
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/10-mail.conf
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^mail_location = mbox:~/mail:INBOX=/var/mail/%u', To: 'mail_location = maildir:~/Maildir'}
+   - { From: '^#mail_plugins =', To: 'mail_plugins = quota'}
+  notify:
+   - Restart dovecot
+
+- name: Authorise dovecot to make authentification in file 10-master.conf
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/10-master.conf
+    block: |
+      unix_listener /var/spool/postfix/private/auth {
+        mode = 0660
+        user = postfix
+        group = postfix
+      }
+    insertafter: '# Postfix smtp-auth'
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - Restart dovecot
+
+- name: ssl management 10-ssl.conf file
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/10-ssl.conf
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^ssl_cert = </etc/dovecot/private/dovecot.pem', To: 'ssl_cert = </etc/letsencrypt/live/{{hostname}}.{{localdomain}}/fullchain.pem'}
+   - { From: '^ssl_key = </etc/dovecot/private/dovecot.key', To: 'ssl_key = </etc/letsencrypt/live/{{hostname}}.{{localdomain}}/privkey.pem'}
+   - { From: '^ssl = yes', To: 'ssl = required'}
+  notify:
+   - Restart dovecot
+
+- name: Ensure subscription for Tash Junk Draft
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/15-mailboxes.conf
+    insertafter: '{{item.After}}'
+    line: '{{item.Line}}'
+  with_items:
+   - { After: 'mailbox Trash {', Line: '    auto = subscribe #Trash'}
+   - { After: 'mailbox Drafts {', Line: '    auto = subscribe #Drafts'}
+   - { After: 'mailbox Junk {', Line: '    auto = subscribe #Junk'}
+  notify:
+   - Restart dovecot
+
+
+- name: Define sql query 
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/dovecot-sql.conf.ext
+    block: |
+      driver = mysql
+      connect = \
+        host=127.0.0.1 \
+        dbname=mailserver \
+        user=mailserver \
+        password={{mailserver}}
+      user_query = SELECT email as user, \
+        concat('*:bytes=', quota) AS quota_rule, \
+        '/var/vmail/%d/%n' AS home, \
+        5000 AS uid, 5000 AS gid \
+        FROM virtual_users WHERE email='%u'
+      password_query = SELECT password FROM virtual_users WHERE email='%u'
+      iterate_query = SELECT email AS user FROM virtual_users
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - Restart dovecot
+
+- name: Change rights and owner of dovecot-sql.conf.ext
+  ansible.builtin.file:
+    path: /etc/dovecot/dovecot-sql.conf.ext
+    owner: root
+    group: root
+    mode: go=
+  notify:
+   - Restart dovecot
+
+- name: Replace pre-existing line
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/10-master.conf
+    regex: '^  unix_listener lmtp {'
+    line: '  unix_listener /var/spool/postfix/private/dovecot-lmtp {'
+  notify:
+   - Restart dovecot
+
+- name: Add lmtp configuration
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/10-master.conf
+    block: |
+      #
+          user = postfix    
+          group = postfix
+          mode = 0600
+      # 
+    insertafter: '  unix_listener /var/spool/postfix/private/dovecot-lmtp'
+    marker: '# {mark} Added by {{ server_admin }} - lmtp conf'
+  notify:
+    - Restart dovecot
+
+- name: (postconf) Tell to Postfix tu use lmtp protocol to communicate with dovecot
+  ansible.builtin.command:
+    cmd: postconf virtual_transport=lmtp:unix:private/dovecot-lmtp
+
+- name: indicate to lmtp to use dovecot sieves plugin
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/20-lmtp.conf
+    regex: '^  \#mail_plugins \= \$mail_plugins'
+    line: '  mail_plugins = $mail_plugins sieve'
+  notify:
+   - Restart dovecot
+
+- name: Dovecot quota policy 
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/90-quota.conf
+    block: |
+      plugin {
+        quota = maildir:User quota
+        
+        quota_status_success = DUNNO
+        quota_status_nouser = DUNNO
+        quota_status_overquota = "452 4.2.2 Mailbox is full and cannot receive any more emails"
+      }
+    insertafter: '^^# <doc/wiki/Quota.txt>'
+    marker: '# {mark} Added by {{ server_admin }} - Quota policy'
+  notify:
+    - Restart dovecot
+
+- name: Dovecot quota status
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/90-quota.conf
+    block: |
+      service quota-status {
+        executable = /usr/lib/dovecot/quota-status -p postfix
+        unix_listener /var/spool/postfix/private/quota-status {
+          user = postfix
+        }
+      }
+    marker: '# {mark} Added by {{ server_admin }} - Quota status'
+  notify:
+    - Restart dovecot
+
+- name: (postconf) Tell to Postfix to check quota
+  ansible.builtin.command:
+    cmd: postconf smtpd_recipient_restrictions=reject_unauth_destination,"check_policy_service unix:private/quota-status"
+
+- name: Dovecot quota warning
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/90-quota.conf
+    block: |
+      plugin {
+        quota_warning = storage=95%% quota-warning 95 %u
+        quota_warning2 = storage=80%% quota-warning 80 %u
+      }
+      service quota-warning {
+        executable = script /usr/local/bin/quota-warning.sh
+        unix_listener quota-warning {
+          user = vmail
+          group = vmail
+          mode = 0660
+        }
+      }
+    marker: '# {mark} Added by {{ server_admin }} - Quota warning'
+  notify:
+    - Restart dovecot
+
+- name: Add /usr/local/bin/quota-warning.sh file
+  ansible.builtin.template:
+    src: templates/quota-warning.sh.j2
+    dest: /usr/local/bin/
+    owner: root
+    group: root
+    mode: a+x
+  notify:
+  - Restart dovecot
+
+- name: Flush handlers
+  meta: flush_handlers

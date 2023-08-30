@@ -1,0 +1,18 @@
+---
+- hosts: mailserver
+  become: yes
+  vars_files:
+    - vars.yml
+  roles:
+    - general
+    - security
+    - database
+    - roundcube
+    - certificats
+    - postfix
+    - dovecot
+    - rspamd
+    - dkim
+    - arc
+    - domain_user_managment
+

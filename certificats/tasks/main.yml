@@ -1,0 +1,44 @@
+---
+# tasks file for certificats
+- name: Install certbot
+  ansible.builtin.apt:
+    pkg: 
+      - certbot
+      - python3-certbot-apache
+    state: latest
+
+- name: Create certificate for webmail
+  ansible.builtin.shell:
+    cmd: certbot certonly --email {{mailadministrator}} --agree-tos --non-interactive --webroot --webroot-path /var/lib/roundcube/public_html/ -d {{ webmail|quote }}.{{ localdomain|quote }}
+  register: result
+  ignore_errors: true
+
+- name: Create certificate for Dovecot and Postix
+  ansible.builtin.shell:
+    cmd: certbot certonly --email {{mailadministrator}} --agree-tos --non-interactive --webroot --webroot-path /var/www/html/ -d {{ hostname|quote }}.{{ localdomain|quote }}
+
+- name: Activate SSL for Apache2
+  ansible.builtin.lineinfile:
+    path: /etc/apache2/sites-available/webmail-http.conf
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^#SSLEngine on', To: 'SSLEngine on'}
+   - { From: '^#SSLCertificateFile', To: 'SSLCertificateFile /etc/letsencrypt/live/{{ webmail }}.{{ localdomain }}/cert.pem'}
+   - { From: '^#SSLCertificateKeyFile', To: 'SSLCertificateKeyFile /etc/letsencrypt/live/{{ webmail }}.{{ localdomain }}/privkey.pem'}
+   - { From: '^#SSLCACertificateFile', To: 'SSLCACertificateFile /etc/letsencrypt/live/{{ webmail }}.{{ localdomain }}/chain.pem'}
+   - { From: '^#SSLProtocol', To: 'SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1'}
+   - { From: '^#SSLHonorCipherOrder on', To: 'SSLHonorCipherOrder on'}
+  when: result is succeeded
+  notify:
+   - restart apache2
+
+- name: Restart postfix dovecot after SSL renew
+  ansible.builtin.blockinfile:
+    path: /etc/letsencrypt/cli.ini
+    block: |
+      post-hook = systemctl restart postfix dovecot apache2
+    marker: '# {mark} Added by {{ server_admin }}'
+
+- name: Flush handlers
+  meta: flush_handlers

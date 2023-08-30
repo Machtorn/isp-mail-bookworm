@@ -1,0 +1,144 @@
+---
+# tasks file for roundcube
+
+- name: Install apache
+  ansible.builtin.apt:
+    name: apache2
+    state: latest
+
+- name: Modules activation and deactivation
+  community.general.apache2_module:
+    name: "{{ item.module }}"
+    state: "{{ item.state }}"
+  loop:
+  - module: headers
+    state: present
+  - module: rewrite
+    state: present
+  - module: deflate
+    state: present
+  - module: proxy_fcgi
+    state: present
+  - module: ssl
+    state: present
+  - module: proxy_http
+    state: present
+  - module: http2
+    state: present
+  - module: setenvif
+    state: present
+  notify: 
+    - restart apache2
+
+- name: Install php
+  ansible.builtin.apt:
+    pkg:
+    - php8.2
+    - php8.2-fpm
+    - php8.2-mysql
+    state: latest
+
+- name: Listen path for php-fpm
+  ansible.builtin.replace:
+    path: /etc/php/8.2/fpm/pool.d/www.conf
+    regexp: '^listen = /run/php/php8.2-fpm.sock'
+    replace: 'listen = 127.0.0.1:9000'
+  notify:
+    - restart php8.2-fpm
+
+- name: Install Roundcube
+  ansible.builtin.apt:
+    pkg:
+    - roundcube
+    - roundcube-plugins
+    - roundcube-plugins-extra
+    - roundcube-mysql
+    state: latest
+
+- name: Add roundcube Vhost
+  ansible.builtin.template:
+    src: templates/webmail-http.conf.j2
+    dest: /etc/apache2/sites-available/webmail-http.conf
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+  notify:
+  - restart apache2
+
+- name: Roundcube Vhost activation
+  ansible.builtin.shell: 
+    cmd: a2ensite {{ roundcube_vhost|quote }}
+    chdir: /etc/apache2/sites-available/
+  notify:
+  - restart apache2
+
+- name: Roundcube hostname configuration
+  ansible.builtin.blockinfile:
+    path: /etc/roundcube/config.inc.php
+    block: |
+      $config['default_host'] = 'tls://{{ hostname }}.{{ localdomain }}';
+      $config['smtp_server'] = 'tls://{{ hostname }}.{{ localdomain }}';
+      $config['smtp_port'] = 587;
+    insertafter: '\$config \= \[\];'
+    marker: '// {mark} Added by {{ server_admin }} - smtp host'
+
+#- name: Remove line for imap_host
+#  ansible.builtin.lineinfile:
+#    path: /etc/roundcube/config.inc.php
+#    state: absent
+#    regexp: '.*imap_host.*'
+
+- name: Remove line for smtp_host
+  ansible.builtin.lineinfile:
+    path: /etc/roundcube/config.inc.php
+    state: absent
+    regexp: '.*smtp_host.*'
+
+- name: Activate Roundcube plugins
+  ansible.builtin.blockinfile:
+    path: /etc/roundcube/config.inc.php
+    block: |
+      'managesieve',
+      'password',
+    insertbefore: '^\];'
+    marker: '// {mark} Added by {{ server_admin }} - plugins'
+
+- name: Password plugin configuration 
+  ansible.builtin.blockinfile:
+    path: /etc/roundcube/plugins/password/config.inc.php
+    block: |
+      $config['password_driver'] = 'sql';
+      $config['password_minimum_length'] = 12;
+      $config['password_force_save'] = true;
+      $config['password_algorithm'] = 'blowfish-crypt';
+      $config['password_algorithm_prefix'] = '{CRYPT}';
+      $config['password_db_dsn'] = 'mysql://mailadmin:{{ mailadmin }}@localhost/mailserver';
+      $config['password_query'] = "UPDATE virtual_users SET password=%P WHERE email=%u";
+    insertbefore: '\?\>'
+    marker: '// {mark} Added by {{ server_admin }}'
+    owner: root
+    group: www-data
+    mode: u=rw,g=r,o=
+
+- name: Password plugin configuration - remove empty array
+  ansible.builtin.lineinfile:
+    path: /etc/roundcube/plugins/password/config.inc.php
+    state: absent
+    regexp: 'config=array'
+
+- name: Sieve plugin configuration 
+  ansible.builtin.blockinfile:
+    path: /etc/roundcube/plugins/managesieve/config.inc.php
+    block: |
+      $config['managesieve_host'] = 'localhost';
+    insertbefore: '\?\>'
+    marker: '// {mark} Added by {{ server_admin }}'
+
+- name: Password plugin configuration - remove empty array
+  ansible.builtin.lineinfile:
+    path: /etc/roundcube/plugins/managesieve/config.inc.php
+    state: absent
+    regexp: 'config=array'
+
+- name: Flush handlers
+  meta: flush_handlers

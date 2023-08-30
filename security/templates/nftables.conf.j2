@@ -1,0 +1,46 @@
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+
+    chain input {
+        type filter hook input priority 0; policy drop;
+        ct state established,related counter accept
+        iifname lo counter accept
+        ip protocol icmp icmp type echo-request counter accept
+        tcp dport 43 counter accept
+        tcp dport 443 counter accept
+        tcp dport 80 counter accept
+        tcp dport 53 counter accept
+        udp dport 53 counter accept
+        tcp dport 587 counter accept
+	tcp dport 25 counter accept
+        tcp dport 993 counter accept
+        tcp dport {{ ssh_port }} counter accept
+        tcp flags & (fin|syn|rst|ack) == rst limit rate 1/second burst 5 packets counter
+        counter drop
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+        counter drop
+    }
+
+    chain output {
+        type filter hook output priority 0; policy drop;
+        ct state established,related counter accept
+        oifname lo counter accept
+        ip protocol icmp icmp type echo-request counter accept
+        tcp dport 43 counter accept
+        tcp dport 443 counter accept
+        tcp dport 80 counter accept
+        tcp dport 53 counter accept
+        udp dport 53 counter accept
+	tcp dport 25 counter accept
+        tcp dport 587 counter accept
+        tcp dport 993 counter accept
+        tcp dport {{ ssh_port }} counter accept
+        counter drop
+    }
+}

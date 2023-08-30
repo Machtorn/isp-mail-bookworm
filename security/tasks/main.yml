@@ -1,0 +1,195 @@
+---
+# tasks file for security
+
+- name: SSH config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^#Port 22', To: 'Port {{ ssh_port }}'}
+   - { From: '^#PermitEmptyPasswords', To: 'PermitEmptyPasswords no'}
+   - { From: '^PermitRootLogin', To: 'PermitRootLogin no'}
+   - { From: '^#PasswordAuthentication', To: 'PasswordAuthentication no'}
+   - { From: '^UsePAM yes', To: 'UsePAM no'}
+   - { From: '^#PrintLastLog yes', To: 'PrintLastLog yes'}
+   - { From: '^X11Forwarding yes', To: 'X11Forwarding no'}
+   - { From: '^#TCPKeepAlive yes', To: 'TCPKeepAlive yes'}
+   - { From: '^#ClientAliveInterval 0', To: 'ClientAliveInterval 60'}
+   - { From: '^#ClientAliveCountMax 3', To: 'ClientAliveCountMax 5'}
+   - { From: '^#LoginGraceTime 2m', To: 'LoginGraceTime 60'}
+   - { From: '^PrintMotd no', To: 'PrintMotd yes'}
+  notify:
+   - reload sshd
+
+- name: Remove iptables package
+  ansible.builtin.apt:
+    name: iptables
+    state: absent
+
+- name: Install nftables package
+  ansible.builtin.apt:
+    name: nftables
+    state: latest
+  notify:
+  - enable nftables
+
+- name: Update nftables.conf file
+  ansible.builtin.template:
+    src: templates/nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: u=rw,g=r,u=r
+
+- name: Install fail2ban package
+  ansible.builtin.apt:
+    name: fail2ban
+    state: latest
+  notify:
+    - enable fail2ban
+    - start fail2ban
+
+- name: Create nftables directory
+  ansible.builtin.file:
+    path: /etc/nftables
+    state: directory
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,o=x
+
+- name: Create fail2ban.conf file
+  ansible.builtin.template:
+    src: templates/fail2ban.conf.j2
+    dest: /etc/nftables/fail2ban.conf
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+  notify:
+  - restart fail2ban
+
+- name: Add fail2ban firewall in nftables.conf
+  ansible.builtin.blockinfile:
+    path: /etc/nftables.conf
+    block: |
+      include "/etc/nftables/fail2ban.conf"
+    marker: '# {mark} Added by {{ server_admin }}'
+
+- name: Comment iptables directives in /etc/fail2ban/jail.conf file
+  ansible.builtin.lineinfile:
+    path: /etc/fail2ban/jail.conf
+    regex: '{{item.From}}'
+    line: '{{item.To}}'
+  with_items:
+   - { From: '^chain = <known/chain>', To: '#chain = <known/chain>'}
+   - { From: '^banaction = iptables-multiport', To: '#banaction = iptables-multiport'}
+   - { From: '^banaction_allports = iptables-allports', To: '#banaction_allports = iptables-allports'}
+   - { From: '^destemail = root@localhost', To: '#destemail = root@localhost'}
+   - { From: '^sender = root@<fq-hostname>', To: '#sender = root@<fq-hostname>'}
+  notify:
+   - restart fail2ban
+
+- name: Add nftables directives in /etc/fail2ban/jail.conf file
+  ansible.builtin.blockinfile:
+    path: /etc/fail2ban/jail.conf
+    block: |
+      # Destination email for action that send you an email
+      destemail = fail2ban@mydomain.example
+
+      # Sender email. Warning: not all actions take this into account. Make sure to test if you rely on this
+      sender    = fail2ban@mydomain.example
+
+      # configure nftables
+      banaction = nftables-multiport
+      chain     = input
+    insertafter: '^\[DEFAULT\]'
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart fail2ban
+
+- name: Add /etc/fail2ban/action.d/nftables-common.local file
+  ansible.builtin.template:
+    src: templates/nftables-common.local.j2
+    dest: /etc/fail2ban/action.d/nftables-common.local
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,u=rx
+  notify:
+  - restart fail2ban
+
+- name: Create custom fail2ban filter for apache 
+  ansible.builtin.file:
+    path: /etc/fail2ban/filter.d/apache-400.conf
+    state: touch
+    mode: u=rw,go=r
+
+- name: Add failregex in apapche-400.conf
+  ansible.builtin.blockinfile:
+    path: /etc/fail2ban/filter.d/apache-400.conf
+    block: |
+      [INCLUDES]
+      before = common.conf
+      
+      [Definition]
+      #failregex = ^<HOST> - .* "(GET|POST|HEAD).*HTTP.*" 400 .*$
+
+      failregex = 	^<HOST> - .* "\\x[0-9]{2}\\x[0-9]{2}.*" 400 .*$
+                        ^<HOST> - .* "(GET|POST|HEAD).*HTTP.*" 400 .*$
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart fail2ban
+
+- name: Create local fail2ban file
+  ansible.builtin.file:
+    path: /etc/fail2ban/jail.local
+    state: touch
+    mode: u=rw,go=r
+
+- name: Add rules in jail.local
+  ansible.builtin.blockinfile:
+    path: /etc/fail2ban/jail.local
+    block: |
+      [sshd]
+      enabled = true
+      bantime = 604800
+      
+      [apache-auth]
+      enabled = true
+
+      [php-url-fopen]
+      enabled = true
+      maxretry = 3
+      findtime = 3600
+      bantime = 604800
+
+      [apache-400]
+      enabled = true
+      filter = apache-400
+      logpath = /var/log/apache2/access.log
+      port = http,https
+      maxretry = 1
+      findtime = 3600
+      bantime = 604800
+      
+      [dovecot]
+      enabled = true
+      port    = pop3,pop3s,imap2,imaps,submission,465,sieve
+
+      [sieve]
+      enabled = true
+
+      [postfix]
+      mode 	= aggressive
+      enabled = true
+      maxretry = 3
+      findtime = 3600
+      bantime = 604800
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart fail2ban
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: vps reboot
+  ansible.builtin.reboot:

@@ -1,0 +1,247 @@
+---
+# tasks file for rspamd
+
+- name: Install rspamd and redis server
+  ansible.builtin.apt:
+    pkg:
+    - rspamd
+    - redis-server
+    state: latest
+
+- name: (postconf) Tell to Postfix to send all incomming mail to rspamd for analyse
+  ansible.builtin.command:
+    cmd: postconf "{{ item }}"
+  loop:
+    - smtpd_milters=inet:127.0.0.1:11332
+    - non_smtpd_milters=inet:127.0.0.1:11332
+    - milter_mail_macros=i {mail_addr} {client_addr} {client_name} {auth_authen}
+  notify:
+    - restart postfix
+
+# Rspamd score parameters
+- name: rspamd score parameters
+  ansible.builtin.template:
+    src: templates/actions.conf.j2
+    dest: /etc/rspamd/override.d/actions.conf
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+  notify:
+   - restart rspamd
+
+# Specifics headers
+- name: Create milter file for specifics headers
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/milter_headers.conf
+    state: touch
+    mode: u=rw,go=r
+
+- name: Modify the header with authentication result
+  ansible.builtin.blockinfile:
+    path: /etc/rspamd/local.d/milter_headers.conf
+    block: |
+      #extended_spam_headers = true;
+      use = ["x-spam-status", "authentication-results", "remove-headers"];
+      authenticated_headers = ["authentication-results"];
+      routines {
+        remove-headers {
+          headers {
+            "X-Rspamd-Server" = 0;
+            "X-Spamd-Bar" = 0;
+            "X-Spam" = 0;
+            "X-Spamd-Bar" = 0;
+            "X-Spam-Level" = 0;
+            "X-Spam-Status" = 0;
+            "X-Spam-Flag" = 0;
+          }
+        }
+      }
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart rspamd
+
+- name: Create file for redis-server/rspamd communication
+  ansible.builtin.file:
+    path: /etc/rspamd/override.d/redis.conf
+    state: touch
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: Add instruction for redis-server/rspamd communication
+  ansible.builtin.lineinfile:
+    path: /etc/rspamd/override.d/redis.conf 
+    line: 'servers = "127.0.0.1";'
+  notify:
+    - restart rspamd
+
+- name: Tell to Redis to listen on ipv4 lo only 
+  ansible.builtin.replace:
+    path: /etc/redis/redis.conf
+    regexp: '.*bind 127.0.0.1 -::1.*'
+    replace: "bind 127.0.0.1"
+  notify:
+    - restart redis-server
+    - restart redis
+
+- name: Create file for worker-proxy.inc
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/worker-proxy.inc
+    state: touch
+    owner: root
+    group: root
+    mode: u=rw,go=r
+
+- name: Worker proxy must listen on ipv4 only
+  ansible.builtin.blockinfile:
+    path: /etc/rspamd/local.d/worker-proxy.inc
+    block: |
+      upstream "local" {
+        default = yes;
+        hosts = "127.0.0.1";
+      }
+      bind_socket = "127.0.0.1:11332";
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart rspamd
+
+- name: Create file for worker-normal.inc
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/worker-normal.inc
+    state: touch
+    owner: root
+    group: root
+    mode: u=rw,go=r
+
+- name: Worker normal must listen on ipv4 only
+  ansible.builtin.lineinfile:
+    path: /etc/rspamd/local.d/worker-normal.inc
+    line: bind_socket = "127.0.0.1:11333";
+  notify:
+    - restart rspamd
+
+# Global spam learning
+
+- name: Add mail plugins to dovecot 
+  ansible.builtin.replace:
+    path: /etc/dovecot/conf.d/20-imap.conf
+    regexp: '.*#mail_plugins.*'
+    replace: "  mail_plugins = $mail_plugins quota imap_sieve"
+  notify:
+    - restart dovecot
+
+- name: Sieve plugins configuration - Dovecot
+  ansible.builtin.blockinfile:
+    path: /etc/dovecot/conf.d/90-sieve.conf
+    block: |
+      # From elsewhere to Junk folder
+      imapsieve_mailbox1_name = Junk
+      imapsieve_mailbox1_causes = COPY
+      imapsieve_mailbox1_before = file:/etc/dovecot/sieve/learn-spam.sieve
+
+      # From Junk folder to elsewhere
+      imapsieve_mailbox2_name = *
+      imapsieve_mailbox2_from = Junk
+      imapsieve_mailbox2_causes = COPY
+      imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-ham.sieve
+
+      sieve_pipe_bin_dir = /etc/dovecot/sieve
+      sieve_global_extensions = +vnd.dovecot.pipe
+      sieve_plugins = sieve_imapsieve sieve_extprograms
+    insertafter: 'plugin {'
+    marker: '# {mark} Added by {{ server_admin }}'
+  notify:
+    - restart dovecot
+
+- name: Create directory for spam/ham config file
+  ansible.builtin.file:
+    path: /etc/dovecot/sieve
+    state: directory
+    mode: '0755'
+
+- name: learn spam sieve script
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: vmail
+    group: vmail
+    mode: u=rw,go=
+  loop:
+    - { src: templates/learn-spam.sieve.j2, dest: /etc/dovecot/sieve/learn-spam.sieve }
+    - { src: templates/learn-ham.sieve.j2, dest: /etc/dovecot/sieve/learn-ham.sieve }
+  notify:
+   - restart dovecot
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: Compile spam sieve file
+  ansible.builtin.command:
+    cmd: sievec /etc/dovecot/sieve/learn-spam.sieve 
+
+- name: Compile ham sieve file
+  ansible.builtin.command:
+    cmd: sievec /etc/dovecot/sieve/learn-ham.sieve
+
+- name: Change owner/group and right to sieve/svbin spam/ham file
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: vmail
+    group: vmail
+    mode: u=rw,go=
+  loop:
+    - /etc/dovecot/sieve/learn-spam.svbin
+    - /etc/dovecot/sieve/learn-ham.svbin
+  notify:
+   - restart dovecot
+
+- name: Tell to rspamd how to learn spam with the global user action 
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: vmail
+    group: vmail
+    mode: u=rwx,go=
+  loop:
+    - { src: templates/rspamd-learn-spam.sh.j2, dest: /etc/dovecot/sieve/rspamd-learn-spam.sh }
+    - { src: templates/rspamd-learn-ham.sh.j2, dest: /etc/dovecot/sieve/rspamd-learn-ham.sh }
+  notify:
+   - restart dovecot
+
+# Autoexpunge
+
+- name: Add autoexpunge to junk and trash (90days)
+  ansible.builtin.lineinfile:
+    path: /etc/dovecot/conf.d/15-mailboxes.conf
+    insertafter: "{{ item.after }}"
+    line: "{{ item.addline }}"
+  loop:
+    - { after: '.*#Junk', addline: "    autoexpunge = 90d #Junk" }
+    - { after: '.*#Trash', addline: "    autoexpunge = 90d #Trash" } 
+  notify:
+    - restart dovecot
+
+- name: Create hash of rspamd password interface
+  ansible.builtin.command:
+    cmd: rspamadm pw -p {{ rspamdpwd }}
+  register: pwdhash
+
+- name: Create file for password hash
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/worker-controller.inc
+    state: touch
+    owner: root
+    group: root
+    mode: u=rw,go=r
+
+- name: Add password hash and tell worker controller to listen to ipv4 only
+  ansible.builtin.blockinfile:
+    path: /etc/rspamd/local.d/worker-controller.inc
+    block: |
+      bind_socket = "127.0.0.1:11334";
+      password = "{{ pwdhash.stdout }}" 
+  notify:
+    - restart rspamd
+
+- name: Flush handlers
+  meta: flush_handlers

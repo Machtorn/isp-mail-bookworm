@@ -1,0 +1,62 @@
+---
+# tasks file for general
+
+- name: Update distro
+  ansible.builtin.apt:
+    upgrade: dist
+
+- name: Install vim
+  ansible.builtin.apt:
+    name: vim
+    state: latest
+    update_cache: true
+
+- name: Vim config
+  ansible.builtin.blockinfile:
+    path: /usr/share/vim/vimrc
+    marker: '"Added by Ansible - Antoine'
+    insertbefore: '" Source a global configuration file if available'
+    block: |
+      set nocompatible
+      set number
+      set smartindent
+      colorschem delek
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#PermitEmptyPasswords'
+    line: PermitEmptyPasswords no
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: PermitRootLogin no
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#PasswordAuthentication'
+    line: PasswordAuthentication no
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^UsePAM yes'
+    line: UsePAM no
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#PrintLastLog yes'
+    line: PrintLastLog yes
+
+
+- name: Update ssh_config file
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^X11Forwarding yes'
+    line: X11Forwarding no
+  notify:
+    - Reload sshd 

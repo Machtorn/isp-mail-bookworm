@@ -1,0 +1,6 @@
+---
+# handlers file for dkim
+- name: restart rspamd
+  ansible.builtin.systemd:
+    name: rspamd.service
+    state: restarted

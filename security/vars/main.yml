@@ -1,0 +1,4 @@
+---
+# vars file for security
+
+ssh_port: 22

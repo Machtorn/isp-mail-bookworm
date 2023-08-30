@@ -1,0 +1,138 @@
+---
+# tasks file for postfix
+
+- name: Install postfix
+  ansible.builtin.apt:
+    pkg:
+    - postfix
+    - postfix-mysql
+    state: latest
+
+# Virtual domain 
+- name: Postfix virtual_domains mysql
+  ansible.builtin.template:
+    src: templates/mysql-virtual-mailbox-domains.cf.j2
+    dest: /etc/postfix/mysql-virtual-mailbox-domains.cf
+    owner: root
+    group: postfix
+    mode: u=rw,g=r,o=
+
+- name: (postconf) Tell to Postfix to read virtualdomain file
+  ansible.builtin.command:
+    cmd: postconf virtual_mailbox_domains=mysql:/etc/postfix/mysql-virtual-mailbox-domains.cf
+  notify:
+    - restart postfix
+
+# Virtual user
+- name: Postfix virtual_users mysql
+  ansible.builtin.template:
+    src: templates/mysql-virtual-mailbox-maps.cf.j2
+    dest: /etc/postfix/mysql-virtual-mailbox-maps.cf
+    owner: root
+    group: postfix
+    mode: u=rw,g=r,o=
+
+- name: (postconf) Tell to Postfix to read virtualusers file
+  ansible.builtin.command:
+    cmd: postconf virtual_mailbox_maps=mysql:/etc/postfix/mysql-virtual-mailbox-maps.cf
+  notify:
+    - restart postfix
+
+# Virtual alias
+- name: Postfix virtual_alias mysql
+  ansible.builtin.template:
+    src: templates/mysql-virtual-alias-maps.cf.j2
+    dest: /etc/postfix/mysql-virtual-alias-maps.cf
+    owner: root
+    group: postfix
+    mode: u=rw,g=r,o=
+
+- name: (postconf) Tell to Postfix to read virtualalias file
+  ansible.builtin.command:
+    cmd: postconf virtual_alias_maps = mysql:/etc/postfix/mysql-virtual-alias-maps.cf,mysql:/etc/postfix/mysql-email2email.cf
+  notify:
+    - restart postfix
+
+# Catchall aliases
+- name: Postfix virtual_mail2mail mysql
+  ansible.builtin.template:
+    src: templates/mysql-email2email.cf.j2
+    dest: /etc/postfix/mysql-email2email.cf
+    owner: root
+    group: postfix
+    mode: u=rw,g=r,o=
+
+####################################################
+
+# Tell to Postfix to use Dovecot for authentification
+
+- name: (postconf) Postfix use dovecot for authentification
+  ansible.builtin.command:
+    cmd: postconf "{{ item }}"
+  loop:
+    - smtpd_sasl_type=dovecot
+    - smtpd_sasl_path=private/auth
+    - smtpd_sasl_auth_enable=yes
+  notify:
+    - restart postfix
+
+# Encryption activation (ssl)
+
+- name: (postconf) Encryption configuration
+  ansible.builtin.command:
+    cmd: postconf "{{ item }}"
+  loop:
+    - smtpd_tls_security_level=may
+    - smtpd_tls_auth_only=yes
+    - smtpd_tls_cert_file=/etc/letsencrypt/live/{{ hostname }}.{{ localdomain }}/fullchain.pem
+    - smtpd_tls_key_file=/etc/letsencrypt/live/{{ hostname }}.{{ localdomain }}/privkey.pem
+    - smtp_tls_security_level=may
+  notify:
+    - restart postfix
+
+- name: 
+  ansible.builtin.replace:
+    path: /etc/postfix/master.cf
+    before: '#submissions.*'
+    regexp: "{{ item.From }}"
+    replace: "{{ item.To }}"
+  loop:
+    - { From: '#submission', To: "submission" }
+    - { From: '#  -o syslog_name', To: "  -o syslog_name"}
+    - { From: '#  -o smtpd_tls_security_level', To: "  -o smtpd_tls_security_level"}
+    - { From: '#  -o smtpd_sasl_auth_enable', To: "  -o smtpd_sasl_auth_enable"}
+    - { From: '#  -o smtpd_tls_auth_only', To: "  -o smtpd_tls_auth_only"}
+    - { From: '#  -o smtpd_reject_unlisted_recipient', To: "  -o smtpd_reject_unlisted_recipient"}
+    - { From: '#  -o smtpd_recipient_restrictions', To: "  -o smtpd_recipient_restrictions"}
+    - { From: '#  -o smtpd_relay_restrictions', To: "  -o smtpd_relay_restrictions"}
+    - { From: '#  -o milter_macro_daemon_name', To: "  -o milter_macro_daemon_name"}
+  notify:
+    - restart postfix
+
+# Spoofing interdiction
+
+- name: (postconf) Tell to Postfix to read email2email 
+  ansible.builtin.command:
+    cmd: postconf smtpd_sender_login_maps=mysql:/etc/postfix/mysql-email2email.cf
+
+- name: Ensure Postfix reject spoofing
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/master.cf
+    insertbefore: '.*enable submissions.*'
+    line: "  -o smtpd_sender_restrictions=reject_sender_login_mismatch,permit_sasl_authenticated,reject"
+  notify:
+    - restart postfix
+
+- name: (postconf) Miscellaneous
+  ansible.builtin.command:
+    cmd: postconf "{{ item }}"
+  loop:
+    - smtpd_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+    - smtp_tls_loglevel = 1
+    - smtpd_tls_loglevel = 1
+    - smtpd_use_tls = yes
+    - inet_protocols = ipv4
+
+
+- name: Flush handlers
+  meta: flush_handlers

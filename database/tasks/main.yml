@@ -1,0 +1,61 @@
+---
+# tasks file for database
+
+- name: Install pymysql
+  ansible.builtin.apt:
+    name: python3-pymysql
+    state: latest
+
+- name: Install mariadb
+  ansible.builtin.apt:
+    name: mariadb-server
+    state: latest
+    update_cache: true
+
+- name: Secure mysql installation
+  ansible.builtin.expect:
+    command: mysql_secure_installation
+    responses:
+      (.*)Enter current password for root(.*): ''
+      (.*)Switch to unix_socket authentication(.*): 'n'
+      (.*)Change the root password(.*): 'Y'
+      (.*)New password(.*): '{{ mariadb_root }}'
+      (.*)Re-enter new password(.*): '{{ mariadb_root }}'
+      (.*)Remove anonymous users(.*): 'Y'
+      (.*)Disallow root login remotely(.*): 'Y'
+      (.*)Remove test database and access to it(.*): 'Y'
+      (.*)Reload privilege tables now(.*): 'Y'
+
+- name: creating mailserver MySQL database
+  mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: mailserver
+
+- name: Copy MySQL database schema to server
+  ansible.builtin.copy:
+    src: files/schema.sql
+    dest: /tmp
+
+- name: setting up SQL schema of mailserver database
+  mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: mailserver
+    state: import
+    target: /tmp/schema.sql
+
+- name: creating MySQL user mailadmin
+  mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: mailadmin
+    password: '{{ mailadmin }}'
+    priv: mailserver.*:SELECT,INSERT,UPDATE,DELETE
+    host: localhost
+
+- name: creating MySQL user to read the mailserver database
+  mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: mailserver
+    password: '{{ mailserver }}'
+    priv: mailserver.*:SELECT
+    host: 127.0.0.1
+

@@ -1,0 +1,29 @@
+---
+# tasks file for domain_user_managment
+
+- name: Add virtualdomain in bdd
+  community.mysql.mysql_query:
+    login_db: mailserver
+    login_user: mailadmin
+    login_password: "{{ mailadmin }}"    
+    query: 
+      - INSERT INTO virtual_domains (name) VALUES ("{{ virtualdomain }}");
+#      - DELETE FROM virtual_domains WHERE id IN (SELECT id FROM virtual_domains EXCEPT SELECT MIN(id) FROM virtual_domains GROUP BY name);
+
+- name: Create the hash of password
+  ansible.builtin.command: doveadm pw -p {{ password }} -s BLF-CRYPT
+  register: emailhashpwd
+
+- name: Print password hash
+  ansible.builtin.debug:
+    var: emailhashpwd
+
+- name: Add mailadress in bdd
+  community.mysql.mysql_query:
+    login_db: mailserver
+    login_user: mailadmin
+    login_password: "{{ mailadmin }}"    
+    query: 
+      - INSERT INTO virtual_users (domain_id, email, password) VALUES ((SELECT id FROM virtual_domains WHERE name='{{ virtualdomain }}'), '{{ emailadress }}','{{ emailhashpwd.stdout }}');
+#      - DELETE FROM virtual_users WHERE id IN (SELECT id FROM virtual_user EXCEPT SELECT MIN(id) FROM virtual_users GROUP BY email);
+
