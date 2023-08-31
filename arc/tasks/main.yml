@@ -3,7 +3,7 @@
 
 - name: Creation arc.conf file based on dkim.conf file
   ansible.builtin.shell:
-    cmd: cp dkim.conf arc.conf
+    cmd: cp dkim_signing.conf arc.conf
     chdir: /etc/rspamd/local.d/
 
 - name: Add some instructions in arc.com
