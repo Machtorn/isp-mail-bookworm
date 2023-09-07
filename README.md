@@ -1,78 +1,78 @@
-# isp-mail-bookworm
+##### isp-mail-bookworm
 
-Before performing any action, choose two domains :
+- Before performing any action, choose two domains :
 
- 1- the first for your fqdn
- 2- the second for your virtual domain (future mail adress)
+  - the first for your fqdn
+  - the second for your virtual domain (future mail adress)
 
-Don't forget to add fqdn server and webmail subdomains in dns zone (A record target your vps ipv4)
+- Don't forget to add fqdn server and webmail subdomains in dns zone (A record target your vps ipv4)
 
-Also reverse dns is very important to configure before working with this playbook
+- Also reverse dns is very important to configure before working with this playbook
 
-This playbook was succefully tested on OVHcloud vps (starter is perfect for a few mail adress)
+- This playbook was succefully tested on OVHcloud vps (starter is perfect for a few mail adress)
 
-In this playbook version ansible host connects to the server with ssh key (some actions have to be performed before launching the playbook)
+- In this playbook version ansible host connects to the server with ssh key (some actions have to be performed before launching the playbook)
 
-ipv4 is disabled on this playbook version. Feel free to remove ipv4 deactivation and manage both ipv4/6
+- ipv4 is disabled on this playbook version. Feel free to remove ipv4 deactivation and manage both ipv4/6
 
-security role is just a start and/or example for your future security policy
+- security role is just a start and/or example for your future security policy
 
-monitoring will be add in future version of this playbook
-
-
-# Vars file with some explanations
+- monitoring will be add in future version of this playbook
 
 
-Base config
-
-hostname: #hostname you will define for your server ex: mail
-
-ipv4_adress: #ipv4 of your server
-
-localdomain: #domain you will use for server fqdn and/or webmail
-
-server_admin: Machtorn
-
-admin_ip: #your public ip (access to rspamd interface)
-
-ssh_port: 22
+##### Vars file with some explanations
 
 
-Apache config
+	Base config
 
-webmail: #name of your webmail (usually webmail)
+	  hostname: #hostname you will define for your server ex: mail
 
-mailadministrator: #your admin email
+	  ipv4_adress: #ipv4 of your server
 
-roundcube_vhost: webmail-http.conf
+	  localdomain: #domain you will use for server fqdn and/or webmail
 
+	  server_admin: Machtorn
 
-Mariadb credentials
+	  admin_ip: #your public ip (access to rspamd interface)
 
-mariadb_root: #mariadb root passwd
-
-mailadmin: #mariadb admin passwd
-
-mailserver: #mariadb server passwd
+	  ssh_port: 22
 
 
-Rspamd interface password
+	Apache config
 
-rspamdpwd: #passwd rspamd gui
+	  webmail: #name of your webmail (usually webmail)
 
+	  mailadministrator: #your admin email
 
-dkim configuration
-
-selector: #selector for your public key in dns zone
-
-
-Add domain and user
-
-virtualdomain: #domain you want to use with your mail adress
-
-emailadress: #your future mail adress
-
-password: #default password defined for your mail adress (user should change it after email creation)
+	  roundcube_vhost: webmail-http.conf
 
 
-Don't forget to declare public key of dkim on your "virtual domain" dns zone.
+	Mariadb credentials
+
+	  mariadb_root: #mariadb root passwd
+
+	  mailadmin: #mariadb admin passwd
+
+	  mailserver: #mariadb server passwd
+
+
+	Rspamd interface password
+
+	  rspamdpwd: #passwd rspamd gui
+
+
+	dkim configuration
+
+	  selector: #selector for your public key in dns zone
+
+
+	Add domain and user
+
+	  virtualdomain: #domain you want to use with your mail adress
+
+	  emailadress: #your future mail adress
+
+	  password: #default password defined for your mail adress (user should change it after email creation)
+
+
+- Don't forget to declare public key of dkim on your "virtual domain" dns zone.
