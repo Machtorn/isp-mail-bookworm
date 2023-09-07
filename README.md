@@ -1,4 +1,4 @@
-#### isp-mail-bookworm
+### isp-mail-bookworm
 
 - Before performing any action, choose two domains :
 
@@ -20,7 +20,7 @@
 - monitoring will be add in future version of this playbook
 
 
-#### Vars file with some explanations
+### Vars file with some explanations
 
 
 	Base config
