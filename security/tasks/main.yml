@@ -76,9 +76,9 @@
     marker: '# {mark} Added by {{ server_admin }}'
 
 - name: Comment iptables directives in /etc/fail2ban/jail.conf file
-  ansible.builtin.lineinfile:
+  ansible.builtin.replace:
     path: /etc/fail2ban/jail.conf
-    regex: '{{item.From}}'
+    regexp: '{{item.From}}'
     line: '{{item.To}}'
   with_items:
    - { From: '^chain = <known/chain>', To: '#chain = <known/chain>'}
