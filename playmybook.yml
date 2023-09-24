@@ -5,13 +5,13 @@
     - vars.yml
   roles:
     - general
-    - security
     - database
     - roundcube
     - certificats
     - postfix
     - dovecot
     - rspamd
+    - security
     - dkim
     - arc
     - domain_user_managment
