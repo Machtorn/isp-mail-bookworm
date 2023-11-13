@@ -160,7 +160,8 @@
     path: /etc/dovecot/conf.d/90-quota.conf
     block: |
       plugin {
-        quota = maildir:User quota
+        quota = count:User quota
+        quota_vsizes = yes
         
         quota_status_success = DUNNO
         quota_status_nouser = DUNNO
