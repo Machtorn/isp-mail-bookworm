@@ -65,6 +65,17 @@
   notify:
   - restart apache2
 
+- name: Hide server signature
+  ansible.builtin.replace:
+    path: /etc/apache2/conf-available/security.conf
+    regexp: "{{ item.From }}"
+    replace: '{{ item.To }}'
+  with_items:
+    - { From: '^ServerTokens OS', To: 'ServerTokens Prod'}
+    - { From: '^ServerSignature On', To: 'ServerSignature Off'}
+  notify:
+    - restart apache2
+
 - name: Roundcube Vhost activation
   ansible.builtin.shell: 
     cmd: a2ensite {{ roundcube_vhost|quote }}

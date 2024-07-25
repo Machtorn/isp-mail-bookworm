@@ -79,7 +79,7 @@
   ansible.builtin.replace:
     path: /etc/fail2ban/jail.conf
     regexp: '{{item.From}}'
-    line: '{{item.To}}'
+    replace: '{{item.To}}'
   with_items:
    - { From: '^chain = <known/chain>', To: '#chain = <known/chain>'}
    - { From: '^banaction = iptables-multiport', To: '#banaction = iptables-multiport'}
@@ -116,6 +116,14 @@
     mode: u=rwx,g=rx,u=rx
   notify:
   - restart fail2ban
+
+- name: No ipv6 allowed
+  ansible.builtin.replace:
+    path: /etc/fail2ban/fail2ban.conf
+    regexp: '#allowipv6 = auto'
+    replace: 'allowipv6 = no'
+  notify:
+    - restart fail2ban
 
 - name: Create custom fail2ban filter for apache 
   ansible.builtin.file:
@@ -188,8 +196,19 @@
   notify:
     - restart fail2ban
 
+- name: change port for ssh
+  ansible.builtin.replace:
+    path: /etc/services
+    regexp: '22/tcp'
+    replace: '{{ ssh_port }}/tcp'
+
 - name: Flush handlers
   meta: flush_handlers
+
+- name: change ansible_port
+  ansible.builtin.set_fact:
+    ansible_port: '{{ ssh_port }}'
+    cacheable: yes
 
 - name: vps reboot
   ansible.builtin.reboot:
